@@ -1,21 +1,22 @@
 import os
 import numpy as np
-from flask import Flask, request, render_template
-from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing import image
+from flask import Flask, request, render_template, url_for
+from tensorflow.keras.models import load_model # type: ignore #
+from tensorflow.keras.preprocessing import image # type: ignore #
 from werkzeug.utils import secure_filename
+import re
 
 # Define paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, 'templates')
-UPLOADS_DIR = os.path.join(BASE_DIR, 'uploads')
+UPLOADS_DIR = os.path.join(BASE_DIR, 'static', 'uploads')
 MODEL_DIR = os.path.join(BASE_DIR, 'models')
 
 # Flask application for user interface
 app = Flask(__name__, template_folder=TEMPLATES_DIR)
 
 # Load trained hybrid model
-model_save_path_hybrid =  "models/skin_disease_hybrid_model.h5"
+model_save_path_hybrid = "models/skin_disease_hybrid_model.h5"
 if os.path.exists(model_save_path_hybrid):
     hybrid_model = load_model(model_save_path_hybrid)
     print(f"Loaded Hybrid Model from {model_save_path_hybrid}")
@@ -35,17 +36,20 @@ def upload_predict():
     if request.method == 'POST':
         image_file = request.files['file']
         if image_file:
-            # Save uploaded file
+            # Save uploaded file with a safe filename
             if not os.path.exists(UPLOADS_DIR):
                 os.makedirs(UPLOADS_DIR)
-            image_location = os.path.join(UPLOADS_DIR, secure_filename(image_file.filename))
+            filename = secure_filename(image_file.filename)
+            filename = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename)  # Replace unsafe characters with underscores
+            image_location = os.path.join(UPLOADS_DIR, filename)
             image_file.save(image_location)
             
             # Predict using the hybrid model
-            prediction, medication = predict_and_get_medication(hybrid_model, image_location)
+            prediction, medication, best_model = predict_and_get_medication(hybrid_model, image_location)
             
             # Render result
-            return render_template('result.html', prediction=prediction, medication=medication)
+            image_url = url_for('static', filename='uploads/' + filename)
+            return render_template('result.html', prediction=prediction, medication=medication, best_model=best_model, image_url=image_url)
     return render_template('index.html')
 
 def predict_and_get_medication(model, image_path, target_size=(224, 224)):
@@ -63,7 +67,12 @@ def predict_and_get_medication(model, image_path, target_size=(224, 224)):
     predicted_label = labels[predicted_class]
     medication = medications.get(predicted_class, "Please consult a dermatologist for further assistance.")
 
-    return predicted_label, medication
+    # Determine which model performed best (for demonstration purposes)
+    resnet_confidence = np.mean(predictions[:, :2])  # Assume ResNet is responsible for classes 0 and 1
+    vgg_confidence = np.mean(predictions[:, 2:])    # Assume VGG16 is responsible for classes 2 and 3
+    best_model = "ResNet50" if resnet_confidence > vgg_confidence else "VGG16"
+
+    return predicted_label, medication, best_model
 
 if __name__ == '__main__':
     # Ensure the 'uploads' directory exists
@@ -93,6 +102,9 @@ if __name__ == '__main__':
         <h1>Prediction: {{ prediction }}</h1>
         <h2>Recommended Medication:</h2>
         <p>{{ medication }}</p>
+        <h2>Best Model: {{ best_model }}</h2>
+        <h2>Uploaded Image:</h2>
+        <img src="{{ image_url }}" alt="Uploaded Image" width="300">
         <a href="/">Go Back</a>
         ''')
 
