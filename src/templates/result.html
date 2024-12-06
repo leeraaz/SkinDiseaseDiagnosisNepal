@@ -1,11 +1,21 @@
 
         <!doctype html>
-        <title>Prediction Result</title>
+        <html>
+        <head><title>Prediction Result</title></head>
+        <body>
         <h1>Prediction: {{ prediction }}</h1>
         <h2>Recommended Medication:</h2>
         <p>{{ medication }}</p>
+        <h2>Model Prediction Confidence Levels:</h2>
+        <ul>
+          <li>ResNet50: {{ model_confidences['ResNet50'] }}%</li>
+          <li>VGG16: {{ model_confidences['VGG16'] }}%</li>
+          <li>InceptionV3: {{ model_confidences['InceptionV3'] }}%</li>
+        </ul>
         <h2>Best Model: {{ best_model }}</h2>
         <h2>Uploaded Image:</h2>
         <img src="{{ image_url }}" alt="Uploaded Image" width="300">
-        <a href="/">Go Back</a>
+        <br><a href="/">Go Back</a>
+        </body>
+        </html>
         
