@@ -2,6 +2,8 @@
 data
 data2
 data3
+data*
 models
+data copy
 src/uploads
 src/static
