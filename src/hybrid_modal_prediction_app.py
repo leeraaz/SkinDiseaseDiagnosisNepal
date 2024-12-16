@@ -1,27 +1,26 @@
 import os
 import numpy as np
+import joblib
 from flask import Flask, request, render_template, url_for
-from tensorflow.keras.models import load_model # type: ignore #
-from tensorflow.keras.preprocessing import image # type: ignore #
+from tensorflow.keras.models import load_model, Model
+from tensorflow.keras.preprocessing.image import load_img, img_to_array
+from sklearn.decomposition import PCA
 from werkzeug.utils import secure_filename
 import re
 
-# Define paths
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TEMPLATES_DIR = os.path.join(BASE_DIR, 'templates')
-UPLOADS_DIR = os.path.join(BASE_DIR, 'static', 'uploads')
-MODEL_DIR = os.path.join(BASE_DIR, 'models')
+# Flask application
+app = Flask(__name__, template_folder="templates")
 
-# Flask application for user interface
-app = Flask(__name__, template_folder=TEMPLATES_DIR)
+# Load models and PCA
+cnn_model_path = "models/improved_hybrid_model.keras"
+knn_model_path = "models/improved_knn_model.pkl"
+rf_model_path = "models/improved_random_forest_model.pkl"
+pca_model_path = "models/pca_model.pkl"
 
-# Load trained hybrid model
-model_save_path_hybrid = "models/skin_disease_hybrid_model.h5"
-if os.path.exists(model_save_path_hybrid):
-    hybrid_model = load_model(model_save_path_hybrid)
-    print(f"Loaded Hybrid Model from {model_save_path_hybrid}")
-else:
-    raise FileNotFoundError(f"Model file not found at {model_save_path_hybrid}. Please ensure the model is trained and saved correctly.")
+cnn_model = load_model(cnn_model_path)
+knn_model = joblib.load(knn_model_path)
+rf_model = joblib.load(rf_model_path)
+pca = joblib.load(pca_model_path)
 
 # Predefined medication suggestions
 medications = {
@@ -31,82 +30,112 @@ medications = {
     3: "Moisturize regularly. Use over-the-counter emollients."
 }
 
+def preprocess_image(image_path, target_size=(224, 224)):
+    """Preprocess the input image for the CNN model."""
+    img = load_img(image_path, target_size=target_size)
+    img_array = img_to_array(img) / 255.0
+    img_array = np.expand_dims(img_array, axis=0)
+    return img_array
+
+def extract_features_with_cnn(cnn_model, img_array):
+    """Extract features from the CNN's intermediate layer."""
+    feature_extractor = Model(inputs=cnn_model.input, outputs=cnn_model.layers[-2].output)
+    features = feature_extractor.predict(img_array)
+    return features.flatten()
+
+def predict_with_ml(features, ml_model, pca):
+    """Predict using traditional ML models (KNN, RF) with PCA."""
+    # Apply PCA to match dimensions
+    features_pca = pca.transform(features.reshape(1, -1))
+    return ml_model.predict(features_pca)[0]
+
 @app.route('/', methods=['GET', 'POST'])
 def upload_predict():
     if request.method == 'POST':
         image_file = request.files['file']
         if image_file:
-            # Save uploaded file with a safe filename
-            if not os.path.exists(UPLOADS_DIR):
-                os.makedirs(UPLOADS_DIR)
+            # Save uploaded file
+            if not os.path.exists("static/uploads"):
+                os.makedirs("static/uploads")
             filename = secure_filename(image_file.filename)
-            filename = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename)  # Replace unsafe characters with underscores
-            image_location = os.path.join(UPLOADS_DIR, filename)
+            filename = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename)
+            image_location = os.path.join("static/uploads", filename)
             image_file.save(image_location)
-            
-            # Predict using the hybrid model
-            prediction, medication, best_model = predict_and_get_medication(hybrid_model, image_location)
-            
-            # Render result
-            image_url = url_for('static', filename='uploads/' + filename)
-            return render_template('result.html', prediction=prediction, medication=medication, best_model=best_model, image_url=image_url)
+
+            # Preprocess image
+            img_array = preprocess_image(image_location)
+
+            # CNN Prediction
+            cnn_predictions = cnn_model.predict(img_array)
+            cnn_pred_class = np.argmax(cnn_predictions, axis=1)[0]
+            model_confidences = {
+                "CNN": float(np.max(cnn_predictions)) * 100  # Confidence percentage
+            }
+
+            # Extract features for traditional ML
+            feature_vector = extract_features_with_cnn(cnn_model, img_array)
+            knn_pred = predict_with_ml(feature_vector, knn_model, pca)
+            rf_pred = predict_with_ml(feature_vector, rf_model, pca)
+
+            # Get results
+            labels = ["Fungal Infection", "Allergic Reaction", "Bacterial Infection", "Dry Skin"]
+            cnn_label = labels[cnn_pred_class]
+            knn_label = labels[knn_pred]
+            rf_label = labels[rf_pred]
+
+            # Medication
+            medication = medications.get(cnn_pred_class, "Consult a dermatologist.")
+
+            return render_template(
+                'result.html',
+                cnn_label=cnn_label,
+                knn_label=knn_label,
+                rf_label=rf_label,
+                medication=medication,
+                model_confidences=model_confidences,
+                image_url=url_for('static', filename=f'uploads/{filename}')
+            )
     return render_template('index.html')
 
-def predict_and_get_medication(model, image_path, target_size=(224, 224)):
-    # Preprocess the image
-    img = image.load_img(image_path, target_size=target_size)
-    img_array = image.img_to_array(img) / 255.0
-    img_array = np.expand_dims(img_array, axis=0)
-
-    # Make a prediction
-    predictions = model.predict(img_array)
-    predicted_class = np.argmax(predictions, axis=1)[0]
-
-    # Get prediction label and medication suggestion
-    labels = ["Fungal Infection", "Allergic Reaction", "Bacterial Infection", "Dry Skin"]
-    predicted_label = labels[predicted_class]
-    medication = medications.get(predicted_class, "Please consult a dermatologist for further assistance.")
-
-    # Determine which model performed best (for demonstration purposes)
-    resnet_confidence = np.mean(predictions[:, :2])  # Assume ResNet is responsible for classes 0 and 1
-    vgg_confidence = np.mean(predictions[:, 2:])    # Assume VGG16 is responsible for classes 2 and 3
-    best_model = "ResNet50" if resnet_confidence > vgg_confidence else "VGG16"
-
-    return predicted_label, medication, best_model
 
 if __name__ == '__main__':
-    # Ensure the 'uploads' directory exists
-    if not os.path.exists(UPLOADS_DIR):
-        os.makedirs(UPLOADS_DIR)
+    os.makedirs("static/uploads", exist_ok=True)
+    os.makedirs("templates", exist_ok=True)
 
-    # Ensure the 'templates' directory exists
-    if not os.path.exists(TEMPLATES_DIR):
-        os.makedirs(TEMPLATES_DIR)
-
-    # Create simple HTML templates for the UI
-    with open(os.path.join(TEMPLATES_DIR, 'index.html'), 'w') as f:
+    # Create templates for the UI
+    with open(os.path.join("templates", 'index.html'), 'w') as f:
         f.write('''
         <!doctype html>
-        <title>Upload an Image</title>
+        <html>
+        <head><title>Skin Disease Classifier</title></head>
+        <body>
         <h1>Upload an image of a skin condition</h1>
         <form method="post" enctype="multipart/form-data">
-          <input type="file" name="file">
-          <input type="submit" value="Upload">
+          <input type="file" name="file" required>
+          <button type="submit">Upload</button>
         </form>
+        </body>
+        </html>
         ''')
 
-    with open(os.path.join(TEMPLATES_DIR, 'result.html'), 'w') as f:
+    with open(os.path.join("templates", 'result.html'), 'w') as f:
         f.write('''
         <!doctype html>
-        <title>Prediction Result</title>
-        <h1>Prediction: {{ prediction }}</h1>
+        <html>
+        <head><title>Prediction Result</title></head>
+        <body>
+        <h1>Prediction Results</h1>
+        <h2>CNN Prediction: {{ cnn_label }}</h2>
+        <h2>KNN Prediction: {{ knn_label }}</h2>
+        <h2>RF Prediction: {{ rf_label }}</h2>
         <h2>Recommended Medication:</h2>
         <p>{{ medication }}</p>
-        <h2>Best Model: {{ best_model }}</h2>
         <h2>Uploaded Image:</h2>
         <img src="{{ image_url }}" alt="Uploaded Image" width="300">
-        <a href="/">Go Back</a>
+        <br><a href="/">Go Back</a>
+        </body>
+        </html>
         ''')
 
-    # Run the Flask app
-    app.run(debug=False)
+    # Start the Flask application
+    app.run(debug=True, host='0.0.0.0', port=5001)
