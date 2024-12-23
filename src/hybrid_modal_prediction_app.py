@@ -1,12 +1,15 @@
 import os
 import numpy as np
 import joblib
+from joblib import load
 from flask import Flask, request, render_template, url_for
 from tensorflow.keras.models import load_model, Model
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from sklearn.decomposition import PCA
 from werkzeug.utils import secure_filename
 import re
+from tensorflow.keras.applications import ResNet50
+from sklearn.preprocessing import StandardScaler
 
 # Flask application
 app = Flask(__name__, template_folder="templates")
@@ -17,6 +20,9 @@ knn_model_path = "models/improved_knn_model.pkl"
 rf_model_path = "models/improved_random_forest_model.pkl"
 pca_model_path = "models/pca_model.pkl"
 
+# Load the saved models
+tr_knn = joblib.load('models/improved_knn_model.pkl')
+tr_rf = joblib.load('models/improved_random_forest_model.pkl')
 vgg16_model_path = "models/Improved_vgg16_model.keras"
 resnet50_model_path = "models/Improved_resnet50_model.keras"
 inceptionv3_model_path = "models/Improved_inceptionV3_model.keras"
@@ -31,6 +37,9 @@ knn_model = joblib.load(knn_model_path)
 rf_model = joblib.load(rf_model_path)
 pca = joblib.load(pca_model_path)
 
+# Scale features for KNN
+scaler = StandardScaler()
+
 # Predefined medication suggestions
 medications = {
     0: "Apply topical antifungal cream. Keep the area clean and dry.",
@@ -39,7 +48,7 @@ medications = {
     3: "Moisturize regularly. Use over-the-counter emollients."
 }
 
-labels = ["Fungal Infection", "Allergic Reaction", "Bacterial Infection", "Dry Skin"]
+labels = ["Fungal Infection", "Eczema", "Acne", "Maligant"]
 
 def preprocess_image(image_path, target_size):
     """Preprocess the input image for the specified target size."""
@@ -69,6 +78,47 @@ def predict_with_ml(features, ml_model, pca):
     features_pca = pca.transform(features.reshape(1, -1))
     return ml_model.predict(features_pca)[0]
 
+resnet = ResNet50(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+def predict_disease_by_tdm(image_path, model, scaler_path=None, class_labels=None):
+    """
+    Predict the disease from an image using a trained model (KNN or Random Forest).
+    
+    Args:
+        image_path (str): Path to the image.
+        model: Trained classification model (KNN or Random Forest).
+        scaler: Scaler used to normalize features (optional, for KNN).
+        class_labels (dict): Mapping of class indices to class names.
+        
+    Returns:
+        prediction (str): Predicted class label (name).
+    """
+    # Load and preprocess the image
+    img = load_img(image_path, target_size=(224, 224))
+    img_array = img_to_array(img) / 255.0
+    img_array = np.expand_dims(img_array, axis=0)
+    
+    # Extract features using ResNet50
+    resnet_features = resnet.predict(img_array)
+    resnet_features_flat = resnet_features.reshape(1, -1)
+    
+    # Load scaler if path is provided and scale features
+    if scaler_path:
+        scaler = load(scaler_path)
+        resnet_features_flat = scaler.transform(resnet_features_flat)
+    
+    # Make a prediction
+    prediction = model.predict(resnet_features_flat)
+    predicted_class_index = prediction[0]  # Extract the predicted class index
+    
+    # Map class index to class name
+    if class_labels:
+        predicted_class = class_labels.get(predicted_class_index, "Unknown Class")
+    else:
+        predicted_class = str(predicted_class_index)  # Fallback to index if no mapping provided
+    
+    return predicted_class
+
+
 @app.route('/', methods=['GET', 'POST'])
 def upload_predict():
     if request.method == 'POST':
@@ -95,10 +145,12 @@ def upload_predict():
             resnet50_pred_class, resnet50_confidence = predict_with_cnn(resnet50_model, image_location, target_size=(224, 224))
             inceptionv3_pred_class, inceptionv3_confidence = predict_with_cnn(inceptionv3_model, image_location, target_size=(299, 299))
 
-            # Traditional ML Models
-            feature_vector = extract_features_with_cnn(cnn_model, img_array)
-            knn_pred = predict_with_ml(feature_vector, knn_model, pca)
-            rf_pred = predict_with_ml(feature_vector, rf_model, pca)
+            # # Traditional ML Models
+            # feature_vector = extract_features_with_cnn(cnn_model, img_array)
+            # knn_pred = predict_with_ml(feature_vector, knn_model, pca)
+            # rf_pred = predict_with_ml(feature_vector, rf_model, pca)
+            knn_trandition =  predict_disease_by_tdm(image_location,tr_knn,"models/traditional_scaler.joblib")
+            rf_trandition =  predict_disease_by_tdm(image_location,tr_rf)
 
             # Find the Best Model
             model_confidences = {
@@ -114,8 +166,10 @@ def upload_predict():
             vgg16_label = labels[vgg16_pred_class]
             resnet50_label = labels[resnet50_pred_class]
             inceptionv3_label = labels[inceptionv3_pred_class]
-            knn_label = labels[knn_pred]
-            rf_label = labels[rf_pred]
+            
+            print("THis is what I cogt"+ knn_trandition)
+            knn_label = labels[int(knn_trandition)]
+            rf_label = labels[int(rf_trandition)]
 
             # Medication
             medication = medications.get(cnn_pred_class, "Consult a dermatologist.")
