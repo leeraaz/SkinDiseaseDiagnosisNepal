@@ -175,7 +175,7 @@ def upload_predict():
             medication = medications.get(cnn_pred_class, "Consult a dermatologist.")
 
             return render_template(
-                'result.html',
+                'resultWithGraph.html',
                 cnn_label=cnn_label,
                 vgg16_label=vgg16_label,
                 resnet50_label=resnet50_label,
