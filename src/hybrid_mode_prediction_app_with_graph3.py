@@ -16,6 +16,7 @@ from sklearn.preprocessing import StandardScaler
 app = Flask(__name__, template_folder="templates")
 
 # Load the saved models
+ensemble_model_path = "models/improved_hybrid_model_batch128.keras"
 tr_knn = joblib.load('models/hybrid_knn_resnet50_model_128.pkl')
 tr_rf = joblib.load('models/hybrid_rf_feature_vgg16_model_128.pkl')
 vgg16_model_path = "models/hybrid_model_vgg16_new128_afterFineTune.keras"
@@ -23,6 +24,7 @@ resnet50_model_path = "models/hybrid_model_resnet50_new128_afterFineTune.keras"
 inceptionv3_model_path = "models/hybrid_model_inceptionV3_new128_afterFineTune.keras"
 
 # Load models
+ensemble_model = load_model(ensemble_model_path)
 vgg16_model = load_model(vgg16_model_path)
 resnet50_model = load_model(resnet50_model_path)
 inceptionv3_model = load_model(inceptionv3_model_path)
@@ -137,6 +139,9 @@ def upload_predict():
             # Preprocess image
             img_array = preprocess_image(image_location, target_size=(224, 224))
 
+            # Insenble Hybrid model
+            cnn_pred_class, cnn_confidence = predict_with_cnn(ensemble_model, image_location, target_size=(224, 224))
+            
 
             # Standalone CNN Models
             vgg16_pred_class, vgg16_confidence = predict_with_cnn(vgg16_model, image_location, target_size=(224, 224))
@@ -149,6 +154,7 @@ def upload_predict():
 
             # Find the Best Model
             model_confidences = {
+                "Hybrid": cnn_confidence,
                 "VGG16": vgg16_confidence,
                 "ResNet50": resnet50_confidence,
                 "InceptionV3": inceptionv3_confidence
@@ -156,12 +162,11 @@ def upload_predict():
             best_model = max(model_confidences, key=model_confidences.get)
 
             # Get results
-            # cnn_label = labels[cnn_pred_class]
+            cnn_label = labels[cnn_pred_class]
             vgg16_label = labels[vgg16_pred_class]
             resnet50_label = labels[resnet50_pred_class]
             inceptionv3_label = labels[inceptionv3_pred_class]
             
-            print("THis is what I cogt"+ knn_trandition)
             knn_label = labels[int(knn_trandition)]
             rf_label = labels[int(rf_trandition)]
 
@@ -170,7 +175,7 @@ def upload_predict():
 
             return render_template(
                 'resultWithGraph.html',
-                cnn_label=inceptionv3_label,
+                cnn_label=cnn_label,
                 vgg16_label=vgg16_label,
                 resnet50_label=resnet50_label,
                 inceptionv3_label=inceptionv3_label,
