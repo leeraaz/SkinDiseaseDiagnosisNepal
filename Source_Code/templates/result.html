@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head><title>Prediction Result</title></head>
+<body>
+<h1>Prediction Results</h1>
+<h2>Hybrid Model Prediction: {{ cnn_label }}</h2>
+<h2>Standalone CNN Predictions:</h2>
+<ul>
+    <li>VGG16: {{ vgg16_label }} (Confidence: {{ model_confidences['VGG16'] }}%)</li>
+    <li>ResNet50: {{ resnet50_label }} (Confidence: {{ model_confidences['ResNet50'] }}%)</li>
+    <li>InceptionV3: {{ inceptionv3_label }} (Confidence: {{ model_confidences['InceptionV3'] }}%)</li>
+</ul>
+<h2>Traditional ML Predictions:</h2>
+<ul>
+    <li>KNN: {{ knn_label }}</li>
+    <li>Random Forest: {{ rf_label }}</li>
+</ul>
+<h2>Recommended Medication:</h2>
+<p>{{ medication }}</p>
+<h2>Best Performing Model:</h2>
+<p>{{ best_model }}</p>
+<h2>Uploaded Image:</h2>
+<img src="{{ image_url }}" alt="Uploaded Image" width="300">
+<br><a href="/">Go Back</a>
+</body>
+</html>
