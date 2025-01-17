@@ -34,6 +34,7 @@ This repository contains a web application where users can upload images of skin
    git clone https://github.com/yourusername/SkinDiseaseDetection-Nepal-ML-CNN.git
    ```
 
+   or download via GDrivelink: https://drive.google.com/drive/folders/12SWDbK1RBVCSEG-2sB8cRKHNen2yhFdJ
 ## Contributing
 
 Contributions to improve the model, add more datasets, or expand on diseases are welcome! Please submit a pull request or open an issue to discuss your ideas.
