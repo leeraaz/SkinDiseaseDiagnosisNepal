@@ -19,11 +19,11 @@ def limit_images(directory, max_images):
                 for img_path in images_to_delete:
                     os.remove(img_path)
 
-# Limit train images to 1000 per category
-limit_images(train_dir, 1000)
+# Limit train images to 1500 per category
+limit_images(train_dir, 1500)
 
 # Calculate max images for test and validation (30% of train folder)
-max_images_test_val = int(0.3 * 1000)
+max_images_test_val = int(0.3 * 1500)
 
 # Limit test images to 30% of train per category
 limit_images(test_dir, max_images_test_val)

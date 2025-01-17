@@ -49,7 +49,6 @@ def preprocess_image(image_path, target_size):
     return img_array
 
 def predict_with_cnn(model, img_array, target_size=(224, 224)):
-    # Ensure the image is preprocessed to the correct size for the model
     img_array_resized = preprocess_image(image_path=img_array, target_size=target_size)
     predictions = model.predict(img_array_resized)
     predicted_class = np.argmax(predictions, axis=1)[0]
@@ -58,29 +57,25 @@ def predict_with_cnn(model, img_array, target_size=(224, 224)):
 
 resnet = ResNet50(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
 def predict_disease_by_knn(image_path, model, scaler_path=None, class_labels=None):
-    # Load and preprocess the image
     img = load_img(image_path, target_size=(224, 224))
     img_array = img_to_array(img) / 255.0
     img_array = np.expand_dims(img_array, axis=0)
     
-    # Extract features using ResNet50
     resnet_features = resnet.predict(img_array)
     resnet_features_flat = resnet_features.reshape(1, -1)
     
-    # Load scaler if path is provided and scale features
     if scaler_path:
         scaler = load(scaler_path)
         resnet_features_flat = scaler.transform(resnet_features_flat)
     
     # Make a prediction
     prediction = model.predict(resnet_features_flat)
-    predicted_class_index = prediction[0]  # Extract the predicted class index
+    predicted_class_index = prediction[0]  
     
-    # Map class index to class name
     if class_labels:
         predicted_class = class_labels.get(predicted_class_index, "Unknown Class")
     else:
-        predicted_class = str(predicted_class_index)  # Fallback to index if no mapping provided
+        predicted_class = str(predicted_class_index) 
     
     return predicted_class
 
