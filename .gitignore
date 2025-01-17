@@ -8,3 +8,4 @@ data copy
 src/uploads
 src/static
 static/*
+tf_env

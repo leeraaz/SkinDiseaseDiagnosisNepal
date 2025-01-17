@@ -51,14 +51,12 @@ medications = {
 labels = ["Fungal Infection", "Eczema", "Acne", "Maligant"]
 
 def preprocess_image(image_path, target_size):
-    """Preprocess the input image for the specified target size."""
     img = load_img(image_path, target_size=target_size)
     img_array = img_to_array(img) / 255.0
     img_array = np.expand_dims(img_array, axis=0)
     return img_array
 
 def predict_with_cnn(model, img_array, target_size=(224, 224)):
-    """Predict using a standalone CNN model with the appropriate input size."""
     # Ensure the image is preprocessed to the correct size for the model
     img_array_resized = preprocess_image(image_path=img_array, target_size=target_size)
     predictions = model.predict(img_array_resized)
@@ -67,31 +65,17 @@ def predict_with_cnn(model, img_array, target_size=(224, 224)):
     return predicted_class, confidence
 
 def extract_features_with_cnn(cnn_model, img_array):
-    """Extract features from the CNN's intermediate layer."""
     feature_extractor = Model(inputs=cnn_model.input, outputs=cnn_model.layers[-2].output)
     features = feature_extractor.predict(img_array)
     return features.flatten()
 
 def predict_with_ml(features, ml_model, pca):
-    """Predict using traditional ML models (KNN, RF) with PCA."""
     # Apply PCA to match dimensions
     features_pca = pca.transform(features.reshape(1, -1))
     return ml_model.predict(features_pca)[0]
 
 resnet = ResNet50(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
 def predict_disease_by_tdm(image_path, model, scaler_path=None, class_labels=None):
-    """
-    Predict the disease from an image using a trained model (KNN or Random Forest).
-    
-    Args:
-        image_path (str): Path to the image.
-        model: Trained classification model (KNN or Random Forest).
-        scaler: Scaler used to normalize features (optional, for KNN).
-        class_labels (dict): Mapping of class indices to class names.
-        
-    Returns:
-        prediction (str): Predicted class label (name).
-    """
     # Load and preprocess the image
     img = load_img(image_path, target_size=(224, 224))
     img_array = img_to_array(img) / 255.0
@@ -175,7 +159,7 @@ def upload_predict():
             medication = medications.get(cnn_pred_class, "Consult a dermatologist.")
 
             return render_template(
-                'result.html',
+                'resultWithGraph.html',
                 cnn_label=cnn_label,
                 vgg16_label=vgg16_label,
                 resnet50_label=resnet50_label,
@@ -194,4 +178,4 @@ if __name__ == '__main__':
     os.makedirs("templates", exist_ok=True)
 
     # Start the Flask application
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    app.run(debug=True, host='0.0.0.0', port=5100)
